@@ -1,0 +1,106 @@
+package main
+
+import "math/rand"
+
+type Board struct {
+	rows int
+	cols int
+	grid [][]*Cell
+}
+
+type Cell struct {
+	row    int
+	col    int
+	number int
+}
+
+type position [2]int
+
+// choose a random number between 2 & 4, with 2 having a higher probability
+func randomNo() int {
+	randomNo := rand.Float64()
+
+	if randomNo > 0.6 {
+		return 2
+	} else {
+		return 4
+	}
+
+}
+
+func (c *Cell) isEmpty() bool {
+	return c.number == 0
+}
+func (c *Cell) reset() {
+	c.number = 0
+}
+
+func (c *Cell) double() {
+	c.number *= 2
+}
+
+func (b Board) getEmptyCells() []position {
+
+	positions := []position{}
+
+	for _, row := range b.grid {
+		for _, cell := range row {
+			if cell.number == 0 {
+				positions = append(positions, position{cell.row, cell.col})
+			}
+		}
+	}
+
+	return positions
+}
+
+func (b Board) getRandomEmptyCell() position {
+	emptyPositions := b.getEmptyCells()
+	idx := rand.Intn(len(emptyPositions))
+	return emptyPositions[idx]
+}
+
+func (b Board) addCell(n int, row, col int) {
+	if row >= b.rows {
+		row = b.rows - 1
+	}
+
+	if col >= b.cols {
+		col = b.cols - 1
+	}
+
+	if b.grid[row][col].isEmpty() {
+		b.grid[row][col].number = n
+	}
+}
+
+func (b Board) addToRandomCell() {
+	randomCell := b.getRandomEmptyCell()
+	b.addCell(randomNo(), randomCell[0], randomCell[1])
+}
+
+func createBoard(rows, cols int) Board {
+
+	var grid [][]*Cell
+
+	for r := range gridRows {
+		row := []*Cell{}
+
+		for j := range gridCols {
+			row = append(row, &Cell{
+				row: r,
+				col: j,
+			})
+		}
+
+		grid = append(grid, row)
+	}
+
+	board := Board{
+		rows: rows,
+		cols: cols,
+		grid: grid,
+	}
+	return board
+
+}
