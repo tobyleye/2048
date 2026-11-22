@@ -25,7 +25,6 @@ func randomNo() int {
 	} else {
 		return 4
 	}
-
 }
 
 func (c *Cell) isEmpty() bool {
