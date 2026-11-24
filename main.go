@@ -1,9 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"os"
+	"path"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -21,22 +21,13 @@ const (
 	gridHeight = (cellHeight * gridCols) + (gridGapY * (gridCols + 1))
 )
 
-func openBestScore() (int, *os.File, error) {
-	scoreFile, err := os.ReadFile("./score.json")
-
-	var bestScore int
-	if err == nil {
-		json.Unmarshal(scoreFile, &bestScore)
-	}
-
-	f, err := os.OpenFile("./score.json", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-
+func getBestScorePath() string {
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return bestScore, nil, err
+		// ?choose a path relative to where program is running from
+		return ""
 	}
-
-	return bestScore, f, nil
-
+	return path.Join(homeDir, "2048_best_score")
 }
 
 func main() {
@@ -47,24 +38,35 @@ func main() {
 
 	defer f.Close()
 
-	bestScore, bestScoreFile, err := openBestScore()
+	bestScoreFilePath := getBestScorePath()
 
-	if err != nil {
-		log.Println("error reading best score..", err)
-	} else {
-		defer bestScoreFile.Close()
+	var bestScoreFile *os.File = nil
+
+	if bestScoreFilePath != "" {
+		bestScoreFile, err = os.OpenFile(bestScoreFilePath, os.O_CREATE|os.O_RDWR,
+			0644)
+
+		if err != nil {
+			log.Println(
+				"error reading best score",
+				err,
+			)
+		} else {
+			defer bestScoreFile.Close()
+		}
+
 	}
 
 	board := createBoard(gridRows, gridCols)
 
-	// initialize with 2 cells
-	board.addToRandomCell()
-	board.addToRandomCell()
+	// start with 2 tiles
+	board.spawnRandomTile(2)
 
 	m := model{
 		board:     board,
-		bestScore: bestScore,
 		scoreFile: bestScoreFile,
+		gameOver:  false,
+		bestScore: readBestScore(bestScoreFile),
 	}
 
 	if _, err := tea.NewProgram(m).Run(); err != nil {

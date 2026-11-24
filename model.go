@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"slices"
 
@@ -20,6 +18,7 @@ type model struct {
 	score     int
 	moves     int
 	bestScore int
+	gameOver  bool
 }
 
 var cellStyle = lipgloss.NewStyle().
@@ -57,30 +56,12 @@ func (m model) mergeCells(cell1, cell2 *Cell) model {
 	cell1.number += cell2.number
 	cell2.reset()
 	m.score += cell1.number
-
-	if m.score > m.bestScore {
+	if m.score > m.bestScore && m.scoreFile != nil {
 		m.bestScore = m.score
-		go func(m model) {
-			if m.scoreFile != nil {
-				// Wipe the file and reset the cursor to the beginning
-				if err := m.scoreFile.Truncate(0); err != nil {
-					return
-				}
-				if _, err := m.scoreFile.Seek(0, 0); err != nil {
-					return
-				}
-				if err := json.NewEncoder(m.scoreFile).Encode(m.score); err != nil {
-					log.Println("error saving  best score..", err)
-				}
-				// if _, err := fmt.Fprintf(m.scoreFile, "%d", m.score); err != nil {
-				// }
-			}
-
-		}(m)
+		go saveBestScore(m.scoreFile, m.bestScore)
 	}
 
 	return m
-
 }
 
 func (m model) handleDirectionKeyPress(direction string) model {
@@ -105,9 +86,7 @@ func (m model) handleDirectionKeyPress(direction string) model {
 						generateNewCell = true
 					} else if cell2.number == cell1.number {
 						m = m.mergeCells(cell1, cell2)
-						// m.mergeCells(n, m)
-						// n.number *= 2
-						// m.reset()
+
 						generateNewCell = true
 						break
 					} else {
@@ -137,8 +116,7 @@ func (m model) handleDirectionKeyPress(direction string) model {
 						generateNewCell = true
 					} else if cell2.number == cell1.number {
 						m = m.mergeCells(cell1, cell2)
-						// n.number *= 2
-						// m.reset()
+
 						generateNewCell = true
 						break
 					} else {
@@ -170,8 +148,7 @@ func (m model) handleDirectionKeyPress(direction string) model {
 						generateNewCell = true
 					} else if cell2.number == cell1.number {
 						m = m.mergeCells(cell1, cell2)
-						// n.number *= 2
-						// m.reset()
+
 						generateNewCell = true
 						break
 					} else {
@@ -216,9 +193,32 @@ func (m model) handleDirectionKeyPress(direction string) model {
 	}
 
 	if generateNewCell {
-		m.board.addToRandomCell()
+		m.board.spawnRandomTile(1)
 	}
 	return m
+}
+
+func (m model) checkGameOver() bool {
+
+	for _, cell := range m.board.flattenGrid() {
+		if cell.isEmpty() {
+			return false
+		}
+	}
+
+	for i := 0; i < m.board.rows-1; i += 1 {
+		row := m.board.grid[i]
+		nextRow := m.board.grid[i+1]
+
+		for j := 0; j < m.board.cols-1; j++ {
+			if row[j].number == nextRow[j].number || row[j].number == row[j+1].number {
+				return false
+			}
+
+		}
+	}
+
+	return true
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -231,7 +231,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q":
 			return m, tea.Quit
 		case "right", "left", "up", "down":
-			m = m.handleDirectionKeyPress(key)
+			if !m.gameOver {
+				m = m.handleDirectionKeyPress(key)
+				m.gameOver = m.checkGameOver()
+			}
+		case "r":
+			if m.gameOver {
+				// reset game state
+				m.board.reset()
+				m.board.spawnRandomTile(2)
+				m.gameOver = false
+				m.score = 0
+			}
 		}
 
 	case tea.WindowSizeMsg:
@@ -241,8 +252,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() tea.View {
-
+func (m model) renderBoard() string {
 	boardRows := []string{}
 
 	cellGap := lipgloss.NewStyle().Width(gridGapX).Height(cellHeight).Background(
@@ -283,11 +293,116 @@ func (m model) View() tea.View {
 	// 	Background(lipgloss.Color(boardBg))
 	// .Width(gridWidth).Height(gridHeight)
 
-	grid := lipgloss.JoinVertical(lipgloss.Top, boardRows...)
-	scoreLine := lipgloss.NewStyle().MarginBottom(1).Render(fmt.Sprintf("score %d", m.score))
-	bestScoreLine := lipgloss.NewStyle().
-		MarginBottom(1).
-		Render(fmt.Sprintf("best score %d", m.bestScore))
+	board := lipgloss.JoinVertical(lipgloss.Top, boardRows...)
 
-	return tea.NewView(lipgloss.JoinVertical(lipgloss.Top, scoreLine, bestScoreLine, grid))
+	return board
+}
+
+func (m model) View() tea.View {
+
+	board := m.renderBoard()
+
+	scoreLine :=
+		lipgloss.NewStyle().
+			// Background(lipgloss.Blue).
+			Width(10).Render(
+			lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				lipgloss.NewStyle().Render("Score"),
+				lipgloss.NewStyle().Width(1).Render(""),
+				lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", m.score)),
+			),
+		)
+
+	bestScoreLine := lipgloss.NewStyle().
+		// Background(lipgloss.Yellow).
+		Width(10).
+		Render(
+			lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				lipgloss.NewStyle().Render("Best"),
+				lipgloss.NewStyle().Render(" "),
+				lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", m.bestScore)),
+			))
+
+	middleGap := gridWidth - lipgloss.Width(scoreLine) - lipgloss.Width(bestScoreLine)
+
+	scoreView := lipgloss.NewStyle().MarginBottom(1).Render(
+		lipgloss.JoinHorizontal(
+			lipgloss.Center,
+			scoreLine,
+			lipgloss.NewStyle().Width(middleGap).String(),
+			bestScoreLine,
+		),
+	)
+
+	if m.gameOver {
+		cardBg := lipgloss.Black
+		gameover := lipgloss.NewStyle().
+			Background(cardBg).
+			Padding(1, 0).
+			Render(
+				lipgloss.JoinVertical(
+					lipgloss.Bottom,
+					lipgloss.PlaceHorizontal(
+						gridWidth,
+						lipgloss.Center,
+						lipgloss.NewStyle().
+							Foreground(lipgloss.Red).
+							Background(cardBg).
+							Render("game over"),
+						lipgloss.WithWhitespaceStyle(
+							lipgloss.NewStyle().
+								Background(lipgloss.Black),
+						),
+					),
+					lipgloss.PlaceHorizontal(
+						gridWidth,
+						lipgloss.Center,
+						lipgloss.NewStyle().
+							Foreground(lipgloss.Green).
+							Background(cardBg).
+							Render("no moves left"),
+						lipgloss.WithWhitespaceStyle(
+							lipgloss.NewStyle().
+								Background(lipgloss.Black),
+						),
+					),
+					lipgloss.PlaceHorizontal(
+						gridWidth,
+						lipgloss.Center,
+						lipgloss.JoinHorizontal(
+							lipgloss.Left,
+							lipgloss.NewStyle().
+								Background(lipgloss.Yellow).
+								Render("r"),
+							lipgloss.NewStyle().
+								Background(cardBg).
+								Render(" new game "),
+
+							lipgloss.NewStyle().
+								Background(lipgloss.Yellow).
+								Render("q"),
+							lipgloss.NewStyle().Background(cardBg).Render(" quit"),
+						),
+						lipgloss.WithWhitespaceStyle(
+							lipgloss.NewStyle().
+								Background(lipgloss.Black),
+						),
+					),
+				),
+			)
+
+		// game over box positining
+		y := (gridHeight - lipgloss.Height(gameover)) / 2
+		body := lipgloss.NewCompositor(
+			lipgloss.NewLayer(board),
+			lipgloss.NewLayer(gameover).X(0).Y(y).Z(1),
+		).Render()
+
+		return tea.NewView(lipgloss.JoinVertical(lipgloss.Top, scoreView, body))
+	} else {
+		return tea.NewView(lipgloss.JoinVertical(lipgloss.Top, scoreView, board))
+	}
+
 }
