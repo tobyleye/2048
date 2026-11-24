@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"slices"
 
@@ -21,28 +22,35 @@ type model struct {
 	gameOver  bool
 }
 
-var cellStyle = lipgloss.NewStyle().
+var cellStyle = lipgloss.
+	NewStyle().
 	Width(cellWidth).
 	Height(cellHeight).
 	Background(lipgloss.Green).
 	Align(lipgloss.Center, lipgloss.Center)
 
-func renderCell(cell *Cell) string {
+func renderCell(cell *Cell, dimmed bool) string {
 	num := fmt.Sprintf("%d", cell.number)
 	if cell.isEmpty() {
-		return cellStyle.Background(
-			lipgloss.Color(emptyCellBg),
-		).Render("")
+		var bg = emptyCellBg
+		if dimmed {
+			bg = emptyCellBgDimmed
+		}
+		return cellStyle.
+			Background(
+				lipgloss.Color(bg),
+			).
+			Render("")
 
 	} else {
-		color, ok := cellColors[cell.number]
-		if !ok {
-			color = cellColors[2]
-		}
-
-		return cellStyle.Background(lipgloss.Color(color.bg)).
+		bg, fg := getCellColor(cell.number, dimmed)
+		log.Println("bg=", bg, "fg=", fg)
+		return cellStyle.
+			Background(lipgloss.Color(bg)).
 			Foreground(
-				lipgloss.Color(color.fg)).Render(num)
+				lipgloss.Color(fg),
+			).
+			Render(num)
 
 	}
 }
@@ -252,7 +260,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) renderBoard() string {
+func (m model) renderBoard(dimmed bool) string {
 	boardRows := []string{}
 
 	cellGap := lipgloss.NewStyle().Width(gridGapX).Height(cellHeight).Background(
@@ -273,7 +281,7 @@ func (m model) renderBoard() string {
 			if itemIndex == 0 {
 				rowChildren = append(rowChildren, cellGap)
 			}
-			rowChildren = append(rowChildren, renderCell(cell))
+			rowChildren = append(rowChildren, renderCell(cell, dimmed))
 			rowChildren = append(rowChildren, cellGap)
 		}
 
@@ -300,7 +308,7 @@ func (m model) renderBoard() string {
 
 func (m model) View() tea.View {
 
-	board := m.renderBoard()
+	board := m.renderBoard(m.gameOver)
 
 	scoreLine :=
 		lipgloss.NewStyle().
