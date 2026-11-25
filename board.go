@@ -9,10 +9,9 @@ type Board struct {
 }
 
 type Cell struct {
-	row    int
-	col    int
-	number int
-	tile   int
+	row  int
+	col  int
+	tile int // 0 when cell is empty
 }
 
 type position [2]int
@@ -29,14 +28,16 @@ func randomTile() int {
 }
 
 func (c *Cell) isEmpty() bool {
-	return c.number == 0
+	return c.tile == 0
 }
 func (c *Cell) reset() {
-	c.number = 0
+	c.tile = 0
 }
 
 func (c *Cell) double() {
-	c.number *= 2
+	if c.tile > 0 {
+		c.tile *= 2
+	}
 }
 
 func (b Board) getEmptyCells() []position {
@@ -45,7 +46,7 @@ func (b Board) getEmptyCells() []position {
 
 	for _, row := range b.grid {
 		for _, cell := range row {
-			if cell.number == 0 {
+			if cell.tile == 0 {
 				positions = append(
 					positions,
 					position{cell.row, cell.col},
@@ -63,7 +64,7 @@ func (b Board) getRandomEmptyCell() position {
 	return emptyPositions[idx]
 }
 
-func (b Board) addCell(n int, row, col int) {
+func (b Board) addTile(tile int, row, col int) {
 	if row >= b.rows {
 		row = b.rows - 1
 	}
@@ -73,7 +74,7 @@ func (b Board) addCell(n int, row, col int) {
 	}
 
 	if b.grid[row][col].isEmpty() {
-		b.grid[row][col].number = n
+		b.grid[row][col].tile = tile
 	}
 }
 
@@ -98,7 +99,7 @@ func (b Board) flattenGrid() []*Cell {
 func (b Board) spawnRandomTile(n int) {
 	for _ = range n {
 		randomCell := b.getRandomEmptyCell()
-		b.addCell(
+		b.addTile(
 			randomTile(),
 			randomCell[0],
 			randomCell[1],

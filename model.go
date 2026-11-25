@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"slices"
 
@@ -30,7 +29,7 @@ var cellStyle = lipgloss.
 	Align(lipgloss.Center, lipgloss.Center)
 
 func renderCell(cell *Cell, dimmed bool) string {
-	num := fmt.Sprintf("%d", cell.number)
+
 	if cell.isEmpty() {
 		var bg = emptyCellBg
 		if dimmed {
@@ -43,14 +42,13 @@ func renderCell(cell *Cell, dimmed bool) string {
 			Render("")
 
 	} else {
-		bg, fg := getCellColor(cell.number, dimmed)
-		log.Println("bg=", bg, "fg=", fg)
+		bg, fg := getTileColor(cell.tile, dimmed)
 		return cellStyle.
 			Background(lipgloss.Color(bg)).
 			Foreground(
 				lipgloss.Color(fg),
 			).
-			Render(num)
+			Render(formatTile(cell.tile))
 
 	}
 }
@@ -59,11 +57,11 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
-func (m model) mergeCells(cell1, cell2 *Cell) model {
+func (m model) mergeTiles(cell1, cell2 *Cell) model {
 
-	cell1.number += cell2.number
+	cell1.tile += cell2.tile
 	cell2.reset()
-	m.score += cell1.number
+	m.score += cell1.tile
 	if m.score > m.bestScore && m.scoreFile != nil {
 		m.bestScore = m.score
 		go saveBestScore(m.scoreFile, m.bestScore)
@@ -73,7 +71,7 @@ func (m model) mergeCells(cell1, cell2 *Cell) model {
 }
 
 func (m model) handleDirectionKeyPress(direction string) model {
-	generateNewCell := false
+	spawnNewTile := false
 	switch direction {
 	case "right":
 
@@ -89,13 +87,13 @@ func (m model) handleDirectionKeyPress(direction string) model {
 					}
 
 					if cell1.isEmpty() && !cell2.isEmpty() {
-						cell1.number = cell2.number
+						cell1.tile = cell2.tile
 						cell2.reset()
-						generateNewCell = true
-					} else if cell2.number == cell1.number {
-						m = m.mergeCells(cell1, cell2)
+						spawnNewTile = true
+					} else if cell2.tile == cell1.tile {
+						m = m.mergeTiles(cell1, cell2)
 
-						generateNewCell = true
+						spawnNewTile = true
 						break
 					} else {
 						break
@@ -119,13 +117,13 @@ func (m model) handleDirectionKeyPress(direction string) model {
 					}
 
 					if cell1.isEmpty() && !cell2.isEmpty() {
-						cell1.number = cell2.number
+						cell1.tile = cell2.tile
 						cell2.reset()
-						generateNewCell = true
-					} else if cell2.number == cell1.number {
-						m = m.mergeCells(cell1, cell2)
+						spawnNewTile = true
+					} else if cell2.tile == cell1.tile {
+						m = m.mergeTiles(cell1, cell2)
 
-						generateNewCell = true
+						spawnNewTile = true
 						break
 					} else {
 						break
@@ -151,13 +149,13 @@ func (m model) handleDirectionKeyPress(direction string) model {
 					}
 
 					if cell1.isEmpty() && !cell2.isEmpty() {
-						cell1.number = cell2.number
+						cell1.tile = cell2.tile
 						cell2.reset()
-						generateNewCell = true
-					} else if cell2.number == cell1.number {
-						m = m.mergeCells(cell1, cell2)
+						spawnNewTile = true
+					} else if cell2.tile == cell1.tile {
+						m = m.mergeTiles(cell1, cell2)
 
-						generateNewCell = true
+						spawnNewTile = true
 						break
 					} else {
 						break
@@ -181,14 +179,14 @@ func (m model) handleDirectionKeyPress(direction string) model {
 					}
 
 					if cell1.isEmpty() && !cell2.isEmpty() {
-						cell1.number = cell2.number
-						cell2.number = 0
-						generateNewCell = true
-					} else if cell2.number == cell1.number {
-						m = m.mergeCells(cell1, cell2)
-						// n.number *= 2
+						cell1.tile = cell2.tile
+						cell2.tile = 0
+						spawnNewTile = true
+					} else if cell2.tile == cell1.tile {
+						m = m.mergeTiles(cell1, cell2)
+						// n.tile *= 2
 						// m.reset()
-						generateNewCell = true
+						spawnNewTile = true
 						break
 					} else {
 						break
@@ -200,7 +198,7 @@ func (m model) handleDirectionKeyPress(direction string) model {
 		}
 	}
 
-	if generateNewCell {
+	if spawnNewTile {
 		m.board.spawnRandomTile(1)
 	}
 	return m
@@ -219,7 +217,7 @@ func (m model) checkGameOver() bool {
 		nextRow := m.board.grid[i+1]
 
 		for j := 0; j < m.board.cols-1; j++ {
-			if row[j].number == nextRow[j].number || row[j].number == row[j+1].number {
+			if row[j].tile == nextRow[j].tile || row[j].tile == row[j+1].tile {
 				return false
 			}
 
@@ -316,9 +314,14 @@ func (m model) View() tea.View {
 			Width(10).Render(
 			lipgloss.JoinHorizontal(
 				lipgloss.Left,
-				lipgloss.NewStyle().Render("Score"),
-				lipgloss.NewStyle().Width(1).Render(""),
-				lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", m.score)),
+				lipgloss.NewStyle().Foreground(
+					lipgloss.Color("#6C7086"),
+				).Render("Score "),
+
+				lipgloss.NewStyle().
+					Bold(true).
+					Foreground(lipgloss.Color("#F9E2AF")).
+					Render(fmt.Sprintf("%d", m.score)),
 			),
 		)
 
@@ -328,9 +331,12 @@ func (m model) View() tea.View {
 		Render(
 			lipgloss.JoinHorizontal(
 				lipgloss.Left,
-				lipgloss.NewStyle().Render("Best"),
-				lipgloss.NewStyle().Render(" "),
-				lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d", m.bestScore)),
+				lipgloss.NewStyle().Foreground(
+					lipgloss.Color("#6C7086"),
+				).Render("Best "),
+				lipgloss.NewStyle().Bold(true).Foreground(
+					lipgloss.Color("#CDD6F4"),
+				).Render(fmt.Sprintf("%d", m.bestScore)),
 			))
 
 	middleGap := gridWidth - lipgloss.Width(scoreLine) - lipgloss.Width(bestScoreLine)
@@ -345,57 +351,61 @@ func (m model) View() tea.View {
 	)
 
 	if m.gameOver {
-		cardBg := lipgloss.Black
+		cardBg := lipgloss.Color(boardBg)
+		keyHintStyle := lipgloss.NewStyle().Background(
+			lipgloss.Color("#45475A"),
+		).Foreground(
+			lipgloss.Color("#F9E2AF")).Padding(0, 1)
+
 		gameover := lipgloss.NewStyle().
 			Background(cardBg).
 			Padding(1, 0).
 			Render(
 				lipgloss.JoinVertical(
 					lipgloss.Bottom,
-					lipgloss.PlaceHorizontal(
-						gridWidth,
-						lipgloss.Center,
-						lipgloss.NewStyle().
-							Foreground(lipgloss.Red).
-							Background(cardBg).
-							Render("game over"),
-						lipgloss.WithWhitespaceStyle(
+					lipgloss.NewStyle().MarginBottom(1).Render(
+						lipgloss.PlaceHorizontal(
+							gridWidth,
+							lipgloss.Center,
 							lipgloss.NewStyle().
-								Background(lipgloss.Black),
+								Foreground(lipgloss.Color("#F38BA8")).
+								Background(cardBg).
+								Render("game over"),
+							lipgloss.WithWhitespaceStyle(
+								lipgloss.NewStyle().
+									Background(cardBg),
+							),
 						),
 					),
-					lipgloss.PlaceHorizontal(
-						gridWidth,
-						lipgloss.Center,
-						lipgloss.NewStyle().
-							Foreground(lipgloss.Green).
-							Background(cardBg).
-							Render("no moves left"),
-						lipgloss.WithWhitespaceStyle(
-							lipgloss.NewStyle().
-								Background(lipgloss.Black),
-						),
-					),
+					// lipgloss.PlaceHorizontal(
+					// 	gridWidth,
+					// 	lipgloss.Center,
+					// 	lipgloss.NewStyle().
+					// 		Foreground(lipgloss.Color("#A6E3A1")).
+					// 		Background(cardBg).
+					// 		Render("no moves left"),
+					// 	lipgloss.WithWhitespaceStyle(
+					// 		lipgloss.NewStyle().
+					// 			Background(cardBg),
+					// 	),
+					// ),
+
 					lipgloss.PlaceHorizontal(
 						gridWidth,
 						lipgloss.Center,
 						lipgloss.JoinHorizontal(
 							lipgloss.Left,
-							lipgloss.NewStyle().
-								Background(lipgloss.Yellow).
+							keyHintStyle.
 								Render("r"),
 							lipgloss.NewStyle().
 								Background(cardBg).
 								Render(" new game "),
-
-							lipgloss.NewStyle().
-								Background(lipgloss.Yellow).
-								Render("q"),
+							keyHintStyle.Render("q"),
 							lipgloss.NewStyle().Background(cardBg).Render(" quit"),
 						),
 						lipgloss.WithWhitespaceStyle(
 							lipgloss.NewStyle().
-								Background(lipgloss.Black),
+								Background(cardBg),
 						),
 					),
 				),

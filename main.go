@@ -65,7 +65,6 @@ func main() {
 	m := model{
 		board:     board,
 		scoreFile: bestScoreFile,
-		gameOver:  false,
 		bestScore: readBestScore(bestScoreFile),
 	}
 

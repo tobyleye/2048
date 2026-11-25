@@ -11,14 +11,14 @@ var boardBg = "#11111B"
 var dimmedTextDark = "#423E44"
 var dimmedTextDarker = "#76747D"
 
-type CellColor struct {
+type tileColor struct {
 	fg         string
 	bg         string
 	dimmedBg   string
 	dimmedText string
 }
 
-var cellColors = map[int]CellColor{
+var tileColors = map[int]tileColor{
 
 	2: {
 		fg:         textBlack,
@@ -95,12 +95,12 @@ var cellColors = map[int]CellColor{
 	},
 }
 
-func getCellColor(tile int, dimmed bool) (string, string) {
-	c, ok := cellColors[tile]
+func getTileColor(tile int, dimmed bool) (string, string) {
+	c, ok := tileColors[tile]
 	if !ok && tile >= 4096 {
-		c = cellColors[4096]
+		c = tileColors[4096]
 	} else if !ok {
-		c = cellColors[2]
+		c = tileColors[2]
 	}
 
 	if dimmed {
